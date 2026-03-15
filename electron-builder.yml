@@ -13,6 +13,11 @@ files:
 
 asar: true
 
+publish:
+  - provider: github
+    owner: jy465
+    repo: SWE40006_T1
+
 win:
   icon: build/icon.ico
   target:

@@ -3,6 +3,7 @@ import { autoUpdater } from 'electron-updater'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import log from 'electron-log'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -36,16 +37,18 @@ function createWindow(): void {
 }
 
 function setupAutoUpdate(): void {
-  // Optional but recommended
+  autoUpdater.logger = log
+  ;(autoUpdater.logger as typeof log).transports.file.level = 'info'
+
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
 
   autoUpdater.on('checking-for-update', () => {
-    console.log('[updater] Checking for updates...')
+    log.info('[updater] checking-for-update')
   })
 
   autoUpdater.on('update-available', (info) => {
-    console.log('[updater] Update available:', info.version)
+    log.info('[updater] update-available', info.version)
     dialog.showMessageBox({
       type: 'info',
       title: 'Update available',
@@ -53,36 +56,43 @@ function setupAutoUpdate(): void {
     })
   })
 
-  autoUpdater.on('update-not-available', () => {
-    console.log('[updater] No updates available')
-  })
-
-  autoUpdater.on('error', (err) => {
-    console.error('[updater] Error:', err)
+  autoUpdater.on('download-progress', (progressObj) => {
+    log.info(
+      `[updater] download ${progressObj.percent.toFixed(1)}% (${(progressObj.bytesPerSecond / 1024 / 1024).toFixed(2)} MB/s)`
+    )
+    if (mainWindow) mainWindow.setProgressBar(progressObj.percent / 100)
   })
 
   autoUpdater.on('update-downloaded', (info) => {
-    console.log('[updater] Update downloaded:', info.version)
+    log.info('[updater] update-downloaded', info.version)
+    if (mainWindow) mainWindow.setProgressBar(-1)
+
     dialog
       .showMessageBox({
         type: 'info',
         title: 'Update ready',
-        message: `Version ${info.version} downloaded. Restart now to install?`,
+        message: `Version ${info.version} downloaded successfully.\nRestart now to install?`,
         buttons: ['Restart now', 'Later']
       })
       .then((result) => {
-        if (result.response === 0) {
-          autoUpdater.quitAndInstall()
-        }
+        if (result.response === 0) autoUpdater.quitAndInstall(false, true)
       })
   })
 
-  // Check after app is ready (prod only)
-  if (!is.dev) {
-    autoUpdater.checkForUpdatesAndNotify()
-  } else {
-    console.log('[updater] Skipped in development mode')
-  }
+  autoUpdater.on('update-not-available', () => {
+    log.info('[updater] update-not-available')
+  })
+
+  autoUpdater.on('error', (err) => {
+    log.error('[updater] error', err)
+    dialog.showMessageBox({
+      type: 'error',
+      title: 'Update error',
+      message: String(err)
+    })
+  })
+
+  autoUpdater.checkForUpdates()
 }
 
 app.whenReady().then(() => {
@@ -95,7 +105,12 @@ app.whenReady().then(() => {
   ipcMain.on('ping', () => console.log('pong'))
 
   createWindow()
-  setupAutoUpdate()
+
+  if (!is.dev) {
+    setupAutoUpdate()
+  } else {
+    log.info('[updater] skipped in development mode')
+  }
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -103,7 +118,5 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
+  if (process.platform !== 'darwin') app.quit()
 })

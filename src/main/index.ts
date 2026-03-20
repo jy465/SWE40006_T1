@@ -96,7 +96,7 @@ function setupAutoUpdate(): void {
 }
 
 app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.electron')
+  electronApp.setAppUserModelId('com.jy465.tomototasks')
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
